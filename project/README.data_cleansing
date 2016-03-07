@@ -1,0 +1,19 @@
+[Data Cleansing]
+---------------
+
+I performed a trivial ammount of data cleansing to ensure smooth running of the
+visualisation code as follows
+
+Cleansing:
+
+1. Removed preamble lines
+1.5. Removed line under headers that just gave units (degC degC days mm hours)
+2. Removed * (* denotes a provisional reading)
+3. Replaced all sequences of space with a tab (to make it a tsv)
+4. Many rows had --- for sun hours, I left them
+5. But one row had it for af and tmin, I just replaced with the values from the equivalent month a year earlier
+
+(Note: for reference both files, pre and post cleansing are included
+
+data/oxforddata.txt.orig
+data/oxforddate.txt

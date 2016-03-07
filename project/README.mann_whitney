@@ -1,0 +1,13 @@
+[Mann Whitney]
+--------------
+
+I pre-calculated Mann Whitney scores for each feature (rain, max temp, 
+min temp) for each month, comparing readings before and after my
+defined cutoff point 1991.
+
+usage:
+
+python oxfmannwhitneyu.py > data/oxfordmw.txt
+
+(Note: the output file has been pre-generated so there is no
+need to run this)
