@@ -11,7 +11,7 @@ and illustrate my findings:
 1. the weather had got generally hotter since the early 90's
 2. the weather had got generally wetter since the early 90's
 3. there had been a seasonal shift (as if the seasons had 'left shifted
-by a couple of months each year)
+by a couple of months')
 
 The data itself contains monthly data points for every year since the
 1850's showing (amongst other things):
@@ -24,8 +24,8 @@ The data itself contains monthly data points for every year since the
 
 see:
 
-./README.data_cleansing - trivail data cleansing activities
-./README.mann_whitney - pre-calculation of mann whitney u test scores
+* ./README.data_cleansing - trivail data cleansing activities
+* ./README.mann_whitney - pre-calculation of mann whitney u test scores
 
 ## Design
 
@@ -74,7 +74,7 @@ to later add a drop down select box to switch to min temperature).
 
 2. Additionally there was an 'interactive legend - bar chart' highlighting 
 the month by month animation.  I also used this to display monthly 
-average rainfall as I didn't thing the main scatter plot represented
+average rainfall as I didn't think the main scatter plot represented
 this well.
 
 ### Version 1 Feedback
@@ -89,7 +89,7 @@ almost random (no obvious trend for recent years to be wetter). Which
 as it turns out is true, that is to say my original hypothesis is
 unfounded - the data never lies!!!!!
 
-* what extra contet do you need to understand the chart?
+* what extra context do you need to understand the chart?
 
 1. A more explanatory title.
 2. Better axis titles.
@@ -177,6 +177,8 @@ whether to remove or move elsewhere (ultimately decided to leave)
 added Mann Whitney U Test values to give a more objective view of
 3. whether there has been change
 4. changed title
+5. Changed colour scale to binary colour scheme for recent vs historical
+encoding
 
 ### Version 3 Feedback
 
@@ -208,3 +210,4 @@ cutoff point (e.g. compare last 50 years to the rest or last 10 years...)
 * udacity training materials
 * http://stackoverflow.com/questions/31892129/d3-js-rotate-text-to-vertical - rotate text labels in d3 
 * http://www.w3schools.com/colors/colors_hex.asp - colour codes
+* https://data.gov.uk/dataset/historic-monthly-meteorological-station-data - data set
