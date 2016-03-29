@@ -24,8 +24,8 @@ The data itself contains monthly data points for every year since the
 
 see:
 
-* ./README.data_cleansing - trivail data cleansing activities
-* ./README.mann_whitney - pre-calculation of mann whitney u test scores
+* [data cleansing](README.data_cleansing) - trivail data cleansing activities
+* [mann_whitney](README.mann_whitney) - pre-calculation of mann whitney u test scores
 
 ## Design
 
