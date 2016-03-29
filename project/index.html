@@ -1,477 +1,417 @@
 <!DOCTYPE html>
-<html>
+<meta charset="utf-8">
+<title>Comparison of Recent vs Historic min/max Temp and Rainfall Density Plots</title>
+
 <head>
-  <meta charset="utf-8">
-  <script src="http://d3js.org/d3.v3.min.js"></script>
-  <script src="http://dimplejs.org/dist/dimple.v2.0.0.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="index.css">
+</head>
 
-  <style>
-    h1 {
-      text-align: left;
-      position: relative;
-      left: 75px;
-    }
-  </style>
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://dimplejs.org/dist/dimple.v2.2.0.min.js"></script>
 
-  <script type="text/javascript">
 
-    // cufoff defines the year when 'after' starts
-    var cutoff = 1991;
-    var before = "1853 - 1990";
-    var after = "1991 - 2015";
+<h1>
+  Comparisaon of Recent vs Historical Rainfall and Temperature - Oxford
+</h1>
 
-    // will be used to hold Mann Whitney scores for rain, temp max and temp min
-    var rain_mw = {};
-    var tmax_mw = {};
-    var tmin_mw = {};
+<form>
+    <input type="radio" name="group-mode" value="overview" checked>overview
+    <input type="radio" name="group-mode" value="detail" onclick="window.open('detail.html')">detail
+</form>
 
-    function draw(data) {
-        
-      //#####################################################################
+<br>
 
-      /*
-        D3.js setup code
-      */
+<script>
 
-      "use strict";
-      var margin = 75,
-      width = 1400 - margin,
-      height = 500 - margin;
+///////////////////////////////////////////////////////////////////
+// USER DEFINABLE VARIABLES
 
-      d3.select('body').append('h1')
-          .text("Comparisaon of Recent vs Historical " + 
-                "Rainfall and Temperature - Oxford"); 
-        
-      var svg = d3.select("body")
-        .append("svg")
-          .attr("width", width + margin)
-          .attr("height", height + margin)
-        .append('g')
-          .attr('class','chart');
+var margin = {top:5, right:5, bottom:5, left:5};
+var displayarea = {width:1392, height:498};
+var gridcols = 12;
+var gridrows = 3;
 
-      //#####################################################################
-  
-      /*
-        historical month by month rainfall bar chart indicator
-        
-        shows historical and recent bars side by side for the average
-        rainfall for each month
-      */
 
-      var rainindicator = new dimple.chart(svg, data);
+var cutoff = 1991;
+var before = "1853 - 1990";
+var after = "1991 - 2015";
+var rain_bandwidth = 30;
+var tmin_bandwidth = 4;
+var tmax_bandwidth = 4;
 
-      rainindicator.setBounds(width * 0.62, height * 0.04, width * 0.30, height * 0.28);
-        
-      // Add months along the x axis
-      var xrain = rainindicator.addCategoryAxis("x", ["mm", "yeargroup"]);
-      xrain.hidden = true;
-        
-      // Use rain for bar size and hide the axis
-      var yrain = rainindicator.addMeasureAxis("y", "rain");
-      yrain.tickFormat = ',.1f';
-      yrain.hidden = true;
+///////////////////////////////////////////////////////////////////
+// helpers for a naive grid system (poor mans bootstrap)
 
-      // Add the bars to the indicator and add event handlers
-      var srain = rainindicator.addSeries("yeargroup", dimple.plot.bar);
-      srain.aggregate = dimple.aggregateMethod.avg;
-      srain.addEventHandler("click", onClick);
-        
-      // lets have a legend      
-      var srainleg = rainindicator.addLegend(width * 0.93, height * 0.06, width * 0.07, height * 0.15);
-      srainleg.fontSize = 12
+function getLeftCoord(blockindex){
+  return ((blockindex - 1) * (Math.floor(displayarea.width / gridcols))) + margin.left;
+}
 
-      // Draw the side chart
-      rainindicator.draw();
+function getRightCoord(blockindex){
+  return (blockindex * (Math.floor(displayarea.width / gridcols))) - margin.right;
+}
 
-      // This block simply adds information bubble. I put it into a d3 data
-      // object to split it onto 2 lines.
-      svg.selectAll("instructions")
-          .data([ "Click any bar to select and pause",
-                  "Click again, to resume animation" ])
+function getTopCoord(blockindex){
+  return ((blockindex - 1) * (Math.floor(displayarea.height / gridrows))) + margin.top
+}
+
+function getBottomCoord(blockindex){
+  return ((blockindex) * (Math.floor(displayarea.height / gridrows))) - margin.bottom
+}
+
+function getWidth(numblocks){
+  return ((Math.floor(displayarea.width / gridcols)) * numblocks) - margin.left - margin.right;
+}
+
+function getHeight(numblocks){
+  return ((Math.floor(displayarea.height  / gridrows)) * numblocks) - margin.top - margin.bottom;
+}
+
+///////////////////////////////////////////////////////////////////
+// frame it
+
+//svg setup
+var svg = d3.select("body").append("svg")
+    .attr("width", displayarea.width)
+    .attr("height", displayarea.height);
+  //.append("g")
+    //.attr("transform", "translate(" + getLeftCoord(1) + "," + 0 + ")");
+    //.attr("transform", "translate(" + 0 + "," + 0 + ")");
+
+///////////////////////////////////////////////////////////////////
+// load the data and get drawing
+
+// load in the mann whitney scores data
+d3.tsv("data/oxfordmw_overall.txt", function(data) {
+  rain_mw = data[0];
+  tmax_mw = data[1];
+  tmin_mw = data[2];
+});
+
+// load in the core data
+d3.tsv("data/oxforddata.txt", function(d) {
+  // adds a separate field indicating whether the data
+  // point is before or after our cutoff point
+  d['yeargroup'] = d['yyyy'] < cutoff ? before : after;
+    return d;
+}, draw);
+
+///////////////////////////////////////////////////////////////////
+
+
+/**
+ * Top level draw callback
+ * initially draws density plots, bar charts and mw scores
+ */
+function draw(error,data){
+
+
+  /////////////////////////////////////////////////////////////////
+  // indicator bar charts
+
+  /**
+   * Function to draw a bar chart indicator.
+   * For the given measure, shows before/after bars for each months average
+   * and illustrates/enables selection and animation in 'detail mode'
+   */
+  function drawIndicator(left, right, topp, bottom, width, height, measure, ylabel, bcolor, acolor, xlabel){
+
+    var indicator = new dimple.chart(svg, data);
+
+
+    indicator.defaultColors = [ new dimple.color(bcolor),
+                                new dimple.color(acolor) ];
+
+      //guess at a sufficient space on the left for y axis
+      var chartleft = left + ((ylabel.length+1) * 14);
+      var chartwidth = width - ((ylabel.length+1) * 14);
+      var chartheight = height;
+
+      if (typeof xlabel !== "undefined" && xlabel !== null) {
+        svg.selectAll(measure + "_density_xlabel")
+          .data(xlabel)
           .enter()
-          .append("text")
-            .attr("x", width * 0.6)
-            .attr("y", function (d, i) { return (height * 0.04) + i * 12; })
-            .style("font-family", "sans-serif")
-            .style("font-size", "10px")
-            .style("color", "Black")
-          .text(function (d) { return d; });
-
+        .append("text")
+          .style("font-family", "sans-serif")
+          .style("font-size", "12px")
+          .style("color", "Black")
+          .attr("transform", function(d, i) {
+            return "translate(" + (chartleft + ((right - chartleft) / 3))  + ", " + bottom + ")";})
+        .text(function (d) { return d; });
+          
+        chartheight = height - (xlabel.length * 14 * 2);
+      }
+        
       // Couldn't find a way to label the y axis without showing tick marks
       // and gridlines - so cheating like this:
-      svg.selectAll("rainindicator_label")
-        .data([ "Average Rainfall",
-                "Per Month (mm)" ])
+      svg.selectAll(measure + "_indicator_label")
+        .data(ylabel)
         .enter()
         .append("text")
           .style("font-family", "sans-serif")
           .style("font-size", "12px")
           .style("color", "Black")
           .attr("transform", function(d, i) {
-            return "translate(" + ((width * 0.6) + i * 14)  + ", " + (height * 0.32) + ") rotate(-90)";})
+            return "translate(" + (left + (i+1) * 14)  + ", " + (bottom) + ") rotate(-90)";})
         .text(function (d) { return d; });
 
+
+      indicator.setBounds(chartleft, topp, chartwidth , chartheight);
+        
+      // Add months along the x axis
+      var x = indicator.addCategoryAxis("x", ["mm", "yeargroup"]);
+      x.hidden = true;
+        
+      // Use rain for bar size and hide the axis
+      var y = indicator.addMeasureAxis("y", measure);
+      y.tickFormat = ',.1f';
+      y.hidden = true;
+
+      // Add the bars to the indicator and add event handlers
+      var ser = indicator.addSeries("yeargroup", dimple.plot.bar);
+      ser.aggregate = dimple.aggregateMethod.avg;
+//      srain.addEventHandler("click", onClick);
+        
+      // lets have a legend      
+      var leg = indicator.addLegend(chartleft, topp, chartwidth, height);
+      leg.fontSize = 12
+
+      // Draw the side chart
+      indicator.draw();
 
       // manipulate styles post draw
-      srain.shapes
-        .style("fill", function (d) { return (d.aggField[0] == before ? "lightgreen" : "green") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "lightgreen" : "green") });
-
-      srainleg.shapes.selectAll("rect")
-        .style("fill", function (d) { return (d.aggField[0] == before ? "lightgreen" : "green") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "lightgreen" : "green") });
-
-      // Remove the lines from the y axis
-      yrain.shapes.selectAll("line,path").remove();
-
-      yrain.shapes.selectAll(".tick").remove();
-      xrain.shapes.selectAll("line,path").remove();
-
-      srain.shapes
-        .attr("rx", 10)
-        .attr("ry", 10)
-        .style("opacity", function (d) { return (d.x === "1" ? 0.9 : 0.4) });
-
-
-      //#####################################################################
-
       /*
-        historical month by month 'average max temp' bar chart indicator
-        
-        shows historical and recent bars side by side for the 'average
-        average max temperature' for each month
-      */
-        
-      var tmaxindicator = new dimple.chart(svg, data);
-        tmaxindicator.setBounds(width * 0.62, height * 0.34, width * 0.3, height * 0.28);
-        
-      // Add months along the x axis
-      var xtmax = tmaxindicator.addCategoryAxis("x", ["mm", "yeargroup"]);
-      xtmax.hidden = true;
-        
-      // Use tmax for bar size and hide the axis
-      var ytmax = tmaxindicator.addMeasureAxis("y", "tmax");
-      ytmax.hidden = true;
-      ytmax.tickFormat = ',.1f';
+        // looks like changing color is unecessary cos I changed the default pallette
+      ser.shapes
+        .style("fill", function (d) { return (d.aggField[0] == before ? bcolor : acolor) });
 
-      // Add the bars to the indicator and add event handlers
-      var stmax = tmaxindicator.addSeries("yeargroup", dimple.plot.bar);
-      stmax.aggregate = dimple.aggregateMethod.avg;
-      stmax.addEventHandler("click", onClick);
-        
-      var stmaxleg = tmaxindicator.addLegend(width * 0.93, height * 0.36, width * 0.07, height * 0.15);
-      stmaxleg.fontSize = 12;
-
-      // Draw the side chart
-      tmaxindicator.draw();
-        
-      stmaxleg.shapes.selectAll("rect")
-        .style("fill", function (d) { return (d.aggField[0] == before ? "#ff9999" : "#ff1a1a") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "#ff9999" : "#ff1a1a") });
-
-      stmax.shapes
-        .style("fill", function (d) { return (d.aggField[0] == before ? "#ff9999" : "#ff1a1a") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "#ff9999" : "#ff1a1a") });
-
-      // Remove the lines from the y axis
-      ytmax.shapes.selectAll("line,path").remove();
-      xtmax.shapes.selectAll("line,path").remove();
-
-      stmax.shapes
-        .attr("rx", 10)
-        .attr("ry", 10)
-        .style("opacity", function (d) { return (d.x === "1" ? 0.9 : 0.4) });
-
-      svg.selectAll("tmaxindicator_label")
-        .data([ "Average Max Temp",
-                "Per Month (celcius)" ])
-        .enter()
-        .append("text")
-          .style("font-family", "sans-serif")
-          .style("font-size", "12px")
-          .style("color", "Black")
-          .attr("transform", function(d, i) {
-            return "translate(" + ((width * 0.6) + i * 12)  + ", " + (height * 0.62) + ") rotate(-90)";})
-        .text(function (d) { return d; });
-
-
-      //#####################################################################
-        
-      /*
-        historical month by month 'average min temp' bar chart indicator
-        
-        shows historical and recent bars side by side for the 'average
-        average min temperature' for each month
+      leg.shapes.selectAll("rect")
+        .style("fill", function (d) { return (d.aggField[0] == before ? bcolor : acolor) })
+        .style("stroke", function (d) { return (d.aggField[0] == before ? bcolor : acolor) });
       */
 
-      var tminindicator = new dimple.chart(svg, data);
-      tminindicator.setBounds(width * 0.62, height * 0.64, width * 0.3, height * 0.28);
-        
-      // Add months along the x axis
-      var xtmin = tminindicator.addCategoryAxis("x", ["mm", "yeargroup"]);
-      xtmin.title = "Month of Year (Jan = 1, ... Dec = 12)"        
-      xtmin.fontSize = 12;        
-
-      // Use min temp for bar size and hide the axis
-      var ytmin = tminindicator.addMeasureAxis("y", "tmin");
-      ytmin.hidden = true;
-      ytmin.tickFormat = ',.1f';
-
-      // Add the bars to the indicator and add event handlers
-      var stmin = tminindicator.addSeries("yeargroup", dimple.plot.bar);
-      stmin.aggregate = dimple.aggregateMethod.avg;
-      stmin.addEventHandler("click", onClick);
-       
-      var stminleg = tminindicator.addLegend(width * 0.93, height * 0.66, width * 0.07, height * 0.15);
-      stminleg.fontSize = 12;
- 
-      // Draw the side chart
-      tminindicator.draw();
-
-      stminleg.shapes.selectAll("rect")
-        .style("fill", function (d) { return (d.aggField[0] == before ? "#99ccff" : "#0033cc") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "#99ccff" : "#0033cc") });
-
-      stmin.shapes
-        .style("fill", function (d) { return (d.aggField[0] == before ? "#99ccff" : "#0033cc") })
-        .style("stroke", function (d) { return (d.aggField[0] == before ? "#99ccff" : "#0033cc") });
-
       // Remove the lines from the y axis
-      ytmin.shapes.selectAll("line,path").remove();
-      xtmin.shapes.selectAll("line,path").remove();
+      y.shapes.selectAll("line,path").remove();
 
-      stmin.shapes
+      y.shapes.selectAll(".tick").remove();
+      x.shapes.selectAll("line,path").remove();
+
+      ser.shapes
         .attr("rx", 10)
-        .attr("ry", 10)
-        .style("opacity", function (d) { return (d.x === "1" ? 0.9 : 0.4) });
+        .attr("ry", 10);
+//        .style("opacity", function (d) { return (d.x === "1" ? 0.9 : 0.4) });
 
-      svg.selectAll("tminindicator_label")
-        .data([ "Average Min Temp",
-                "Per Month (celcius)" ])
-        .enter()
-        .append("text")
-          .style("font-family", "sans-serif")
-          .style("font-size", "12px")
-          .style("color", "Black")
-          .attr("transform", function(d, i) {
-            return "translate(" + ((width * 0.6) + i * 12)  + ", " + (height * 0.92) + ") rotate(-90)";})
-        .text(function (d) { return d; });
+      return indicator;
+  }
+
+  var rainIndicator = drawIndicator(getLeftCoord(8), getRightCoord(11),
+                                    getTopCoord(1), getBottomCoord(1),
+                                    getWidth(4), getHeight(1), 
+                                    "rain", ["Average Rainfall","Per Month (mm)"],
+                                    "lightgreen", "darkgreen", ["Month of Year (Jan = 1 ... Dec = 12)"]);
 
 
-      //#####################################################################
+  var tmaxIndicator = drawIndicator(getLeftCoord(8), getRightCoord(11),
+                                    getTopCoord(2), getBottomCoord(2),
+                                    getWidth(4), getHeight(1), 
+                                    "tmin", ["Average Max Temp","Per Month (celsius)"],
+                                    "pink", "darkred", ["Month of Year (Jan = 1 ... Dec = 12)"]);
 
-      /*
-        The main chart is a scatter plot showing average rainfall against
-        temperature for the current month
+  var tminIndicator = drawIndicator(getLeftCoord(8), getRightCoord(11),
+                                    getTopCoord(3), getBottomCoord(3),
+                                    getWidth(4), getHeight(1), 
+                                    "tmin", ["Average Min Temp","Per Month (celsius)"],
+                                    "lightblue", "darkblue", ["Month of Year (Jan = 1 ... Dec = 12)"]);
 
-        two series will be shown, one for max and one for min temperature,
-        these will be coloured to represent historical vs recent data points
-      */
+  //////////////////////////////////////////////////////////////////////////////////////
+  // MannWhitney scores
 
-      var myChart = new dimple.chart(svg, data);
+  /**
+   * Adds a text label showing the MW score for the given measure (for the given
+   * month when in detail mode
+   */
+  function drawMannWhitney(measure, mwdata, left, topp, bottom){
+      
+    var fourdp = d3.format(".4f");
 
-      // setup x axis
-      myChart.setBounds(width * 0.08, height * 0.04, width * 0.5, height * 0.88);
-      var x = myChart.addMeasureAxis("x", "rain");
-      x.overrideMin = 0;
-      x.overrideMax = 160;
-      x.title = "Average Rainfall Per Month  (mm)"; 
-      x.fontSize = 12;
-        
-      // setup y axis for max temp  
-      var y = myChart.addMeasureAxis("y", "tmax");
-      y.tickFormat = ',.1f';
-      y.overrideMin = -5;
-      y.overrideMax = 30;
-      y.title = "Average Temperature Per Month  (celcius)"; 
-      y.fontSize = 12;
-
-      var sermax = myChart.addSeries(["yyyy"], dimple.plot.bubble, [x,y]);
-      sermax.aggregate = dimple.aggregateMethod.avg;
-
-      // setup alternative y axis y1 for min temp
-      var y1 = myChart.addMeasureAxis(y, "tmin");
-
-      var sermin = myChart.addSeries(["yyyy"], dimple.plot.bubble, [x,y1]);
-      sermin.aggregate = dimple.aggregateMethod.avg;
- 
-
-      //#####################################################################
-        
-      /*
-          setup storyboard to control animation
-
-          animation will cycle each chart through each month of the year
-       */
-
-      // The frame duration for the animation in milliseconds
-      var frame = 1000;
-      var firstTick = true;
-
-      var sb = myChart.setStoryboard("mm", onTick);
-      sb.addOrderRule("mm"); 
-      sb.frameDuration = frame;
-
-      myChart.draw();
-
-      // post draw d3 styling and stuff for the manin chart
-      sb.storyLabel.remove();
-      myChart.legends = [];
-
-      sermin.shapes
-        .style("fill", function (d) { return (d.aggField[0] < cutoff ? "#99ccff" : "#0033cc") })
-        .style("stroke", function (d) { return (d.aggField[0] < cutoff ? "#99ccff" : "#0033cc") });
-
-      sermax.shapes
-        .style("fill", function (d) { return (d.aggField[0] < cutoff ? "#ff9999" : "#ff1a1a") })
-        .style("strok", function (d) { return (d.aggField[0] < cutoff ? "#ff9999" : "#ff1a1a") });
-
-
-      //#####################################################################
-
-      /*
-        add text labels to show Mann Whitney scores for average month by
-        month historical vs recent
-       */
-
-      // rainfall Mann Whitney score
-      svg.selectAll("rain_mw")
-        .data([rain_mw[1]])
-        .enter().append("text")
-          .attr("id", "rain_mw_label")
-          .style("font-family", "sans-serif")
-          .style("font-size", "45px")
-          .attr("id", "rain_mw_label")
-          .attr("x", width * 0.93)
-          .attr("y", function (d, i) { return (height * 0.26 + (i * 45))})
-          .style("fill", function (d) { return (rain_mw[0] < 0.05 ? "red" : "green") })
-        .text(function(d) {return d});
+    svg.selectAll(measure + "_mw")
+      .data([mwdata[1]])
+      .enter().append("text")
+        .attr("id", measure + "_mw_label")
+        .style("font-family", "sans-serif")
+        .style("font-size", "30px")
+        .attr("x", left)
+        .attr("y", function (d, i) { return (bottom - 30)})
+        .style("fill", function (d) { return (mwdata[1] < 0.05 ? "red" : "green") })
+      .text(function(d) {return fourdp(d)});
 
       // as I didn't get hovers to work show a tiny message explaining(ish)
       // Mann Whitney scores
-      svg.selectAll("rain_mw_message")
+      svg.selectAll(measure + "_mw_message")
         .data(["< 0.05 = changed"])
         .enter().append("text")
           .attr("id", "rain_mw_message")
           .style("font-family", "sans-serif")
           .style("font-size", "10px")
-          .attr("x", width * 0.93)
-          .attr("y", function (d, i) { return (height * 0.30 + (i * 10))})
+          .attr("x", left)
+          .attr("y", function (d, i) { return (bottom + (i * 10))})
         .text(function(d) {return d});
+  }
 
-      // Max Temp Mann Whitney score
-      svg.selectAll("tmax_mw")
-        .data([tmax_mw[1]])
-        .enter().append("text")
-          .attr("id", "tmax_mw_label")
-          .style("font-family", "sans-serif")
-          .style("font-size", "45px")
-          .attr("id", "tmax_mw_label")
-          .attr("x", width * 0.93)
-          .attr("y", function (d, i) { return (height * 0.56 + (i * 45))})
-          .style("fill", function (d) { return (tmax_mw[1] < 0.05 ? "red" : "green") })
-        .text(function(d) {return d});
+  drawMannWhitney("rain", rain_mw, getLeftCoord(12), getTopCoord(1), getBottomCoord(1));
+  drawMannWhitney("tmax", tmax_mw, getLeftCoord(12), getTopCoord(2), getBottomCoord(2));
+  drawMannWhitney("tmin", tmin_mw, getLeftCoord(12), getTopCoord(3), getBottomCoord(3));
 
-      // Min Temp Mann Whitney score
-      svg.selectAll("tmin_mw")
-        .data([tmin_mw[1]])
-        .enter().append("text")
-          .attr("id", "tmin_mw_label")
-          .style("font-family", "sans-serif")
-          .style("font-size", "45px")
-          .attr("id", "tmin_mw_label")
-          .attr("x", width * 0.93)
-          .attr("y", function (d, i) { return (height * 0.86 + (i * 45))})
-          .style("fill", function (d) { return (tmin_mw[1] < 0.05 ? "red" : "green") })
-        .text(function(d) {return d});
+  //////////////////////////////////////////////////////////////////////////////////////
+  // Draw Density Plot
 
-      //#####################################################################
+  /**
+   * Draw density plot for the given measure, showing before and after the cutoff
+   */
+  function drawDensityChart(data, measure, bandwidth, 
+                            xdomain, ydomain, bclass, aclass,
+                            left, right, topp, bottom,
+                            xlab, ylab){
 
-      /**
-       *  called when any of the indicator chart(s) bars are called to toggle animation
-       */
-      function onClick(e) {
-        //Pause the animation
-        sb.pauseAnimation();
-        if (e.xValue === sb.getFrameValue()) {
-          sb.startAnimation();
-        } else {
-          sb.goToFrame(e.xValue);
-          sb.pauseAnimation();
-        }
-      };
+    //
+    //
+    var chartleft = left + (ylab.length * 14 * 4);
+    var chartbottom = bottom - (xlab.length * 14 * 2);
+    xrange = [0, right - chartleft];
+    yrange = [chartbottom - topp, 0];
 
-      /**
-       *  On tick of the main charts storyboard
-       */
-      function onTick(e) {
+    svg.selectAll(measure + "_density_xlabel")
+      .data(xlab)
+      .enter()
+      .append("text")
+        .style("font-family", "sans-serif")
+        .style("font-size", "12px")
+        .style("color", "Black")
+        .attr("transform", function(d, i) {
+          return "translate(" + (chartleft + ((right - chartleft) / 3))  + ", " + bottom + ")";})
+      .text(function (d) { return d; });
 
-        if (!firstTick) {
-          // Color all shapes the same
-          srain.shapes
-            .transition()
-            .duration(frame / 2)
-              .style("opacity", function (d) { return (d.x === e ? 0.9 : 0.4) });
-          stmin.shapes
-            .transition()
-            .duration(frame / 2)
-              .style("opacity", function (d) { return (d.x === e ? 0.9 : 0.4) });
-          stmax.shapes
-            .transition()
-            .duration(frame / 2)
-              .style("opacity", function (d) { return (d.x === e ? 0.9 : 0.4) });
+    svg.selectAll(measure + "_density_ylabel")
+      .data(ylab)
+      .enter()
+      .append("text")
+        .style("font-family", "sans-serif")
+        .style("font-size", "12px")
+        .style("color", "Black")
+        .attr("transform", function(d, i) {
+          return "translate(" + (left + (i+1) * 14)  + ", " + chartbottom + ") rotate(-90)";})
+      .text(function (d) { return d; });
 
-          /*
-            essentially the index into the MW arrays is 2 less than
-            the ticker but we have to cater for wrap around
-          */
-          var ind = (e == 1 ? 12 : e - 1);
+    // the x-scale parameters
+    var x = d3.scale.linear()
+    .domain(xdomain)
+    .range(xrange);
 
-          svg.selectAll("#rain_mw_label")
-            .data([rain_mw[ind]])
-            .text(function(d) {return d;})
-              .style("fill", function (d) { return (rain_mw[ind] < 0.05 ? "red" : "green") })
-          
-          svg.selectAll("#tmax_mw_label")
-            .data([tmax_mw[ind]])
-            .text(function(d) {return d;})
-              .style("fill", function (d) { return (tmax_mw[ind] < 0.05 ? "red" : "green") })
-          
-          svg.selectAll("#tmin_mw_label")
-            .data([tmin_mw[ind]])
-            .text(function(d) {return d;})
-              .style("fill", function (d) { return (tmin_mw[ind] < 0.05 ? "red" : "green") })
-        
-        }
+    // the y-scale parameters
+    var y = d3.scale.linear()
+    .domain(ydomain)
+    .range(yrange);
 
-        firstTick = false;
+    var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+
+    var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+    .ticks(5)
+    .tickFormat(d3.format(".1%"));
+
+    var bline = d3.svg.line()
+      .x(function(d) { return x(d[0]); })
+      .y(function(d) { return y(d[1]); });
+
+    var aline = d3.svg.line()
+      .x(function(d) { return x(d[2]); })
+      .y(function(d) { return y(d[3]); });
+
+    svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(" + chartleft + "," + chartbottom + ")")
+      .call(xAxis)
+
+    svg.append("g")
+      .attr("class", "y axis")
+      .attr("transform", "translate(" + chartleft + "," + topp + ")")
+      .call(yAxis);
+
+    var bef = [];
+    var aft = [];
+
+    data.forEach(function(d){
+      if(d['yeargroup'] == before){
+        bef.push(d[measure]);
       }
-    };
-  </script>
-</head>
-
-<body>
-  <script type="text/javascript">
-
-    // load in the mann whitney scores data
-    d3.tsv("data/oxfordmw.txt", function(data) {
-      rain_mw = data[0];
-      tmax_mw = data[1];
-      tmin_mw = data[2];
+      else{
+        aft.push(d[measure]);
+      }
     });
 
-    //format = d3.time.format("%m");
+    var kde = kernelDensityEstimator(epanechnikovKernel(bandwidth), x.ticks(100));
 
-    // load in our weather data and callback to draw
-    d3.tsv("data/oxforddata.txt", function(d) {
-      // adds a separate field indicating whether the data
-      // point is before or after our cutoff point
-      d['yeargroup'] = d['yyyy'] < cutoff ? before : after;
-      //d['mm'] = format.parse(d['mm']);
-      return d;
-    }, draw);
+    var kde_bef = kde(bef);
+    var kde_aft = kde(aft);
+    kde_measure = kde_bef.map(function(e,i){return [kde_bef[i][0],kde_bef[i][1],kde_aft[i][0],kde_aft[i][1]]});
 
-  </script>
+    svg.append("path")
+      .attr("class", bclass)
+      .attr("transform", "translate(" + chartleft + "," + (topp) + ")")
+      .attr("d", bline(kde_measure));
 
-</body>
-</html>
+    svg.append("path")
+      .attr("class", aclass)
+      .attr("transform", "translate(" + chartleft + "," + (topp) + ")")
+      .attr("d", aline(kde_measure));
+  }
+  
+  drawDensityChart(data, "rain", rain_bandwidth,
+                  [-50,200], [0,.012],
+                  "brain", "arain",
+                  getLeftCoord(1), getRightCoord(7), 
+                  getTopCoord(1), getBottomCoord(1),
+                  ["Rainfall (mm)"], ["Density"]);
+
+  drawDensityChart(data, "tmax", tmax_bandwidth,
+                  [-5,30], [0,.09],
+                  "btmax", "atmax",
+                  getLeftCoord(1), getRightCoord(7), 
+                  getTopCoord(2), getBottomCoord(2),
+                  ["Max Temp (celsius)"], ["Density"]);
+
+  drawDensityChart(data, "tmin", tmin_bandwidth,
+                  [-5,30], [0,.09],
+                  "btmin", "atmin",
+                  getLeftCoord(1), getRightCoord(7), 
+                  getTopCoord(3), getBottomCoord(3),
+                  ["Min Temp (celsius)"], ["Density"]);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+// density function helpers
+
+function kernelDensityEstimator(kernel, x) {
+  return function(sample) {
+    return x.map(function(x) {
+    //console.log(x + " ... " + d3.mean(sample, function(v) { return kernel(x - v); }));    
+    return [x, d3.mean(sample, function(v) { return kernel(x - v); })];
+    });
+  };
+}
+
+function epanechnikovKernel(bandwith) {
+  return function(u) {
+    //return Math.abs(u /= bandwith) <= 1 ? .75 * (1 - u * u) / bandwith : 0;
+  if(Math.abs(u = u /  bandwith) <= 1) {
+   return 0.75 * (1 - u * u) / bandwith;
+  } else return 0;
+  };
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+</script>

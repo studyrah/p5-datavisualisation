@@ -1,0 +1,93 @@
+body {
+  font: 10px sans-serif;
+}
+
+.h1 {
+  text-align: center;
+  position: relative;
+  font: 30px sans-serif;
+}
+
+.bline {
+  fill: none;
+  stroke: #ff9999;
+  stroke-width: 1.5px;
+}
+.aline {
+  fill: none;
+  stroke: #ff0000;
+  stroke-dasharray: 3,3;
+  stroke-width: 1.5px;
+}
+
+.brain {
+  fill: none;
+  stroke: lightgreen;
+  stroke-width: 1.5px;
+}
+.arain {
+  fill: none;
+  stroke: darkgreen;
+  stroke-dasharray: 3,3;
+  stroke-width: 1.5px;
+}
+
+.btmax {
+  fill: none;
+  stroke: pink;
+  stroke-width: 1.5px;
+}
+.atmax {
+  fill: none;
+  stroke: darkred;
+  stroke-dasharray: 3,3;
+  stroke-width: 1.5px;
+}
+
+.btmin {
+  fill: none;
+  stroke: lightblue;
+  stroke-width: 1.5px;
+}
+.atmin {
+  fill: none;
+  stroke: darkblue;
+  stroke-dasharray: 3,3;
+  stroke-width: 1.5px;
+}
+
+.bbarrain {
+  fill: lightgreen;
+  stroke: lightgreen; 
+}
+.abarrain {
+  fill: lightgreen;
+  stroke: lightgreen; 
+}
+
+.bbartmax {
+  fill: pink;
+  stroke: pink; 
+}
+.abartmax {
+  fill: darkgreen;
+  stroke: darkgreen; 
+}
+.bbartmin {
+  fill: lightblue;
+  stroke: lightblue; 
+}
+.abartmin {
+  fill: darkblue;
+  stroke: darkblue; 
+}
+
+
+
+
+.axis path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.5px;
+  shape-rendering: crispEdges;
+}
